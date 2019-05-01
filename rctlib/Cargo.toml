@@ -1,0 +1,16 @@
+[package]
+name = "rctlib"
+version = "0.1.0"
+authors = ["Alessandro Pilotti <apilotti@cloudbasesolutions.com>"]
+edition = "2018"
+
+[dependencies]
+serde = "1.0"
+serde_json = "1.0"
+serde_derive = "1.0"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["vsbackup", "winerror", "wtypes", "objbase", "vss", "cguid", "fileapi", "ioapiset", "winioctl", "errhandlingapi"] }
+
+[lib]
+crate-type = ["rlib", "dylib"]

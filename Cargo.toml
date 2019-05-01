@@ -1,0 +1,13 @@
+[package]
+name = "rct-service"
+version = "0.1.0"
+authors = ["Alessandro Pilotti <apilotti@cloudbasesolutions.com>"]
+edition = "2018"
+
+[dependencies]
+rocket = { version = "0.4.1", features = ["tls"] }
+rocket_contrib = { version = "0.4.1", features = ["json"] }
+serde = "1.0"
+serde_json = "1.0"
+serde_derive = "1.0"
+rctlib = { path = "rctlib" }
