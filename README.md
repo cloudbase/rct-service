@@ -55,10 +55,13 @@ For development purposes you can also just run it with:
 A Python client sample is included to showcase how to use the REST API:
 
     python rct-client.py --auth-key swordfish \
-    --remote-vhd-path "C:\\VHDS\\mydisk.vhdx" \
+    --remote-vhd-path "C:\VHDS\mydisk.vhdx" \
     --local-disk-path mydisk.raw \
-    --rct-id "rctX:5bfde23b:ce75:4303:b54f:6c18394f105c:00000001"
+    --rct-id "rctX:5bfde23b:ce75:4303:b54f:6c18394f105c:00000001" \
+    --cert-path C:\path\to\cert.pem
 
 The RCT ID is optional, if not provided the last available one is used.
-Local disk path contains the data obtained from the RCT service, in RAW format
+The local disk path contains the data obtained from the RCT service, in RAW format
 (it can be converted to other formats with [qemu-img](https://cloudbase.it/qemu-img-windows/) if needed).
+The certificate path is needed to verify the service's TLS identity, if omitted
+the verification is disabled.

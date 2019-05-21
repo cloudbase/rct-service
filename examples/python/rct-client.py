@@ -18,7 +18,7 @@ import requests
 from requests.packages.urllib3 import exceptions
 
 
-def get_disk_info(base_url, auth_key, disk_path, verify=False):
+def get_disk_info(base_url, auth_key, disk_path, verify=True):
     url = "%s/vdisk/%s/info" % (base_url, disk_path)
     r = requests.get(
         url, headers={"auth_key": auth_key}, verify=verify)
@@ -26,7 +26,7 @@ def get_disk_info(base_url, auth_key, disk_path, verify=False):
     return r.json()
 
 
-def get_rct_info(base_url, auth_key, disk_path, verify=False):
+def get_rct_info(base_url, auth_key, disk_path, verify=True):
     url = "%s/vdisk/%s/rct" % (base_url, disk_path)
     r = requests.get(
         url, headers={"auth_key": auth_key}, verify=verify)
@@ -34,7 +34,7 @@ def get_rct_info(base_url, auth_key, disk_path, verify=False):
     return r.json()
 
 
-def query_disk_changes(base_url, auth_key, disk_path, rct_id, verify=False):
+def query_disk_changes(base_url, auth_key, disk_path, rct_id, verify=True):
     url = "%s/vdisk/%s/rct/%s/changes" % (base_url, disk_path, rct_id)
     r = requests.get(
         url, headers={"auth_key": auth_key}, verify=verify)
@@ -43,7 +43,7 @@ def query_disk_changes(base_url, auth_key, disk_path, rct_id, verify=False):
 
 
 def get_disk_content(base_url, auth_key, disk_path, out_file, offset, length,
-                     verify=False):
+                     verify=True):
     url = "%s/vdisk/%s/content?offset=%d&length=%d" % (
         base_url, disk_path, offset, length)
     with requests.get(
@@ -72,6 +72,8 @@ def parse_arguments():
     parser.add_argument('--rct-id', type=str,
                         help="RCT id, using the last available one "
                         "if not provided")
+    parser.add_argument('--cert-path', type=str,
+                        help="X509 server certificate to be verified")
 
     args = parser.parse_args()
     return args
@@ -80,6 +82,8 @@ def parse_arguments():
 def main():
     requests.packages.urllib3.disable_warnings(
         exceptions.InsecureRequestWarning)
+    requests.packages.urllib3.disable_warnings(
+        exceptions.SubjectAltNameWarning)
 
     args = parse_arguments()
 
@@ -87,11 +91,13 @@ def main():
     auth_key = args.auth_key
     disk_path = args.remote_vhd_path
     local_filename = args.local_disk_path
+    verify_cert = args.cert_path or False
 
-    disk_info = get_disk_info(base_url, auth_key, disk_path)
+    disk_info = get_disk_info(
+        base_url, auth_key, disk_path, verify=verify_cert)
     print(disk_info)
 
-    rct_info = get_rct_info(base_url, auth_key, disk_path)
+    rct_info = get_rct_info(base_url, auth_key, disk_path, verify=verify_cert)
     print(rct_info)
 
     if not rct_info["enabled"]:
@@ -99,7 +105,8 @@ def main():
 
     rct_id = args.rct_id or rct_info["most_recent_id"]
 
-    disk_changes = query_disk_changes(base_url, auth_key, disk_path, rct_id)
+    disk_changes = query_disk_changes(
+        base_url, auth_key, disk_path, rct_id, verify=verify_cert)
     print("Disk changes: %d" % len(disk_changes))
     print("Total bytes: %d" % sum(d["length"] for d in disk_changes))
 
@@ -110,7 +117,8 @@ def main():
                   (i + 1, len(disk_changes), disk_change["offset"],
                    disk_change["length"]))
             get_disk_content(base_url, auth_key, disk_path, f,
-                             disk_change["offset"], disk_change["length"])
+                             disk_change["offset"], disk_change["length"],
+                             verify=verify_cert)
 
 
 if __name__ == "__main__":
