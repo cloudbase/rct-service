@@ -18,7 +18,6 @@
 extern crate serde_derive;
 #[macro_use]
 extern crate rocket;
-#[macro_use]
 extern crate rocket_contrib;
 
 extern crate rctlib;
