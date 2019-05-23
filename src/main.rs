@@ -12,7 +12,7 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-#![feature(proc_macro_hygiene, decl_macro)]
+#![feature(proc_macro_hygiene, decl_macro, result_map_or_else)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -95,6 +95,7 @@ impl Read for VirtDiskReader {
 #[derive(Debug, Serialize, Deserialize)]
 struct VirtDiskInfo {
     pub virtual_size: u64,
+    pub parent_path: Option<String>,
 }
 
 fn open_vdisk(path: &str, read_only: bool) -> Result<VirtDisk, NotFound<String>> {
@@ -108,8 +109,17 @@ fn open_vdisk(path: &str, read_only: bool) -> Result<VirtDisk, NotFound<String>>
 fn get_disk_info(path: String, _key: AuthKeyGuard) -> Result<Json<VirtDiskInfo>, NotFound<String>> {
     let vdisk = open_vdisk(&path, true)?;
     let virtual_size = vdisk.get_virtual_size().unwrap();
+    let parent_path = vdisk.get_parent_path().map_or_else(
+        |e| match e.result() {
+            ERROR_VHD_INVALID_TYPE => None,
+            _ => panic!(e),
+        },
+        |v| Some(v),
+    );
+
     Ok(Json(VirtDiskInfo {
         virtual_size: virtual_size,
+        parent_path: parent_path,
     }))
 }
 

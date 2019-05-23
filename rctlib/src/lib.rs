@@ -37,6 +37,8 @@ const VIRTUAL_STORAGE_TYPE_VENDOR_MICROSOFT: GUID = GUID {
 const FALSE: BOOL = 0;
 const TRUE: BOOL = 1;
 
+pub const ERROR_VHD_INVALID_TYPE: DWORD = 0xC03A001B;
+
 #[derive(Debug)]
 pub struct VirtualDiskError {
     result: DWORD,
@@ -198,6 +200,21 @@ impl VirtDisk {
             unsafe { &*(buf.as_ptr() as *const _ as *const _GET_VIRTUAL_DISK_INFO) };
         let virtual_size = unsafe { gvdi.__bindgen_anon_1.Size.VirtualSize };
         Ok(virtual_size)
+    }
+
+    pub fn get_parent_path(&self) -> Result<String, VirtualDiskError> {
+        let buf =
+            self.get_info(_GET_VIRTUAL_DISK_INFO_VERSION_GET_VIRTUAL_DISK_INFO_PARENT_LOCATION)?;
+        let gvdi: &_GET_VIRTUAL_DISK_INFO =
+            unsafe { &*(buf.as_ptr() as *const _ as *const _GET_VIRTUAL_DISK_INFO) };
+        Ok(unsafe {
+            u16_ptr_to_string(
+                gvdi.__bindgen_anon_1
+                    .ParentLocation
+                    .ParentLocationBuffer
+                    .as_ptr(),
+            )
+        })
     }
 
     pub fn query_changes(

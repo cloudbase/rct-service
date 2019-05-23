@@ -66,6 +66,9 @@ def get_disk_content(base_url, auth_key, disk_path, out_file, offset, length,
 
 
 def show_rct_info(base_url, auth_key, disk_path, verify):
+    disk_info = get_disk_info(
+        base_url, auth_key, disk_path, verify=verify)
+    print("Virtual disk info: %s" % disk_info)
     rct_info = get_rct_info(base_url, auth_key, disk_path, verify=verify)
     print("RCT status: %s" % rct_info)
 
