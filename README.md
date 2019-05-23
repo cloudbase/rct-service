@@ -52,7 +52,26 @@ For development purposes you can also just run it with:
 
 # Client
 
-A Python client sample is included to showcase how to use the REST API:
+A Python client sample is included to showcase how to use the REST API.
+
+To enable RCT for a virtual disk:
+
+    python rct-client.py --auth-key swordfish \
+    --remote-vhd-path "C:\VHDS\mydisk.vhdx" \
+    --local-disk-path mydisk.raw \
+    --enable-rct \
+    --cert-path C:\path\to\cert.pem
+
+To disable RCT for a virtual disk:
+
+    python rct-client.py --auth-key swordfish \
+    --remote-vhd-path "C:\VHDS\mydisk.vhdx" \
+    --local-disk-path mydisk.raw \
+    --disable-rct \
+    --cert-path C:\path\to\cert.pem
+
+To download the changed sectors since a given RCT ID into a local RAW disk
+(useful for incremental backups):
 
     python rct-client.py --auth-key swordfish \
     --remote-vhd-path "C:\VHDS\mydisk.vhdx" \
@@ -61,7 +80,9 @@ A Python client sample is included to showcase how to use the REST API:
     --cert-path C:\path\to\cert.pem
 
 The RCT ID is optional, if not provided the last available one is used.
-The local disk path contains the data obtained from the RCT service, in RAW format
-(it can be converted to other formats with [qemu-img](https://cloudbase.it/qemu-img-windows/) if needed).
+The local disk path contains the data obtained from the RCT service, in RAW
+format (it can be converted to other formats with
+[qemu-img](https://cloudbase.it/qemu-img-windows/) if needed).
+
 The certificate path is needed to verify the service's TLS identity, if omitted
 the verification is disabled.

@@ -18,7 +18,7 @@ import requests
 from requests.packages.urllib3 import exceptions
 
 
-def get_disk_info(base_url, auth_key, disk_path, verify=True):
+def get_disk_info(base_url, auth_key, disk_path, verify):
     url = "%s/vdisk/%s/info" % (base_url, disk_path)
     r = requests.get(
         url, headers={"auth_key": auth_key}, verify=verify)
@@ -26,7 +26,7 @@ def get_disk_info(base_url, auth_key, disk_path, verify=True):
     return r.json()
 
 
-def get_rct_info(base_url, auth_key, disk_path, verify=True):
+def get_rct_info(base_url, auth_key, disk_path, verify):
     url = "%s/vdisk/%s/rct" % (base_url, disk_path)
     r = requests.get(
         url, headers={"auth_key": auth_key}, verify=verify)
@@ -34,7 +34,15 @@ def get_rct_info(base_url, auth_key, disk_path, verify=True):
     return r.json()
 
 
-def query_disk_changes(base_url, auth_key, disk_path, rct_id, verify=True):
+def set_rct_info(base_url, auth_key, disk_path, enabled, verify):
+    url = "%s/vdisk/%s/rct?enabled=%s" % (
+        base_url, disk_path, str(enabled).lower())
+    r = requests.put(
+        url, headers={"auth_key": auth_key}, verify=verify)
+    r.raise_for_status()
+
+
+def query_disk_changes(base_url, auth_key, disk_path, rct_id, verify):
     url = "%s/vdisk/%s/rct/%s/changes" % (base_url, disk_path, rct_id)
     r = requests.get(
         url, headers={"auth_key": auth_key}, verify=verify)
@@ -43,7 +51,7 @@ def query_disk_changes(base_url, auth_key, disk_path, rct_id, verify=True):
 
 
 def get_disk_content(base_url, auth_key, disk_path, out_file, offset, length,
-                     verify=True):
+                     verify):
     url = "%s/vdisk/%s/content?offset=%d&length=%d" % (
         base_url, disk_path, offset, length)
     with requests.get(
@@ -57,23 +65,71 @@ def get_disk_content(base_url, auth_key, disk_path, out_file, offset, length,
                 out_file.write(chunk)
 
 
+def enable_rct(base_url, auth_key, disk_path, enable_rct, verify):
+    set_rct_info(
+        base_url, auth_key, disk_path, enabled=enable_rct, verify=verify)
+    rct_info = get_rct_info(base_url, auth_key, disk_path, verify=verify)
+    print("RCT status: %s" % rct_info)
+
+
+def download_to_local_raw_disk(base_url, auth_key, disk_path, rct_id,
+                               local_filename, verify):
+    disk_info = get_disk_info(
+        base_url, auth_key, disk_path, verify=verify)
+    print("Virtual disk info: %s" % disk_info)
+
+    rct_info = get_rct_info(base_url, auth_key, disk_path, verify=verify)
+    print("RCT status: %s" % rct_info)
+
+    if not rct_info["enabled"]:
+        raise Exception("RCT not enabled for this disk")
+
+    rct_id = rct_id or rct_info["most_recent_id"]
+
+    disk_changes = query_disk_changes(
+        base_url, auth_key, disk_path, rct_id, verify=verify)
+    print("Disk changes: %d" % len(disk_changes))
+    print("Total bytes: %d" % sum(d["length"] for d in disk_changes))
+
+    with open(local_filename, 'wb') as f:
+        f.truncate(disk_info["virtual_size"])
+        for i, disk_change in enumerate(disk_changes):
+            print("Requesting disk data %d/%d. Offset: %d, length: %d" %
+                  (i + 1, len(disk_changes), disk_change["offset"],
+                   disk_change["length"]))
+            get_disk_content(base_url, auth_key, disk_path, f,
+                             disk_change["offset"], disk_change["length"],
+                             verify=verify)
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description='Backup a Hyper-V virtual disk using RCT')
-    parser.add_argument('--base-url', type=str,
-                        default="https://localhost:6677",
-                        help='Base RCT service URL')
-    parser.add_argument('--auth-key', type=str, required=True,
-                        help='Auth key for the RCT service')
-    parser.add_argument('--remote-vhd-path', type=str, required=True,
-                        help='Path of the Hyper-V virtual disk (VHD or VHDX)')
-    parser.add_argument('--local-disk-path', type=str, required=True,
-                        help='Local RAW disk path')
-    parser.add_argument('--rct-id', type=str,
-                        help="RCT id, using the last available one "
-                        "if not provided")
-    parser.add_argument('--cert-path', type=str,
-                        help="X509 server certificate to be verified")
+        description='Backup a Hyper-V virtual disk using RCT', add_help=True)
+    parser.add_argument(
+        '--base-url', type=str, default="https://localhost:6677",
+        help='Base RCT service URL')
+    parser.add_argument(
+        '--auth-key', type=str, required=True,
+        help='Auth key for the RCT service')
+    parser.add_argument(
+        '--remote-vhd-path', type=str, required=True,
+        help='Path of the Hyper-V virtual disk (VHD or VHDX)')
+    parser.add_argument(
+        '--cert-path', type=str,
+        help="X509 server certificate to be verified")
+    parser.add_argument(
+        '--rct-id', type=str,
+        help="RCT id, using the last available one if not provided")
+
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        '--enable-rct', action='store_true', dest="enable_rct",
+        help='Enable RCT for this virtual disk')
+    group.add_argument(
+        '--disable-rct', action='store_false', dest="enable_rct",
+        help='Disable RCT for this virtual disk')
+    group.add_argument(
+        '--local-disk-path', type=str, help='Local RAW disk path')
 
     args = parser.parse_args()
     return args
@@ -86,39 +142,16 @@ def main():
         exceptions.SubjectAltNameWarning)
 
     args = parse_arguments()
+    verify = args.cert_path or False
 
-    base_url = args.base_url
-    auth_key = args.auth_key
-    disk_path = args.remote_vhd_path
-    local_filename = args.local_disk_path
-    verify_cert = args.cert_path or False
-
-    disk_info = get_disk_info(
-        base_url, auth_key, disk_path, verify=verify_cert)
-    print(disk_info)
-
-    rct_info = get_rct_info(base_url, auth_key, disk_path, verify=verify_cert)
-    print(rct_info)
-
-    if not rct_info["enabled"]:
-        raise Exception("RCT not enabled for this disk")
-
-    rct_id = args.rct_id or rct_info["most_recent_id"]
-
-    disk_changes = query_disk_changes(
-        base_url, auth_key, disk_path, rct_id, verify=verify_cert)
-    print("Disk changes: %d" % len(disk_changes))
-    print("Total bytes: %d" % sum(d["length"] for d in disk_changes))
-
-    with open(local_filename, 'wb') as f:
-        f.truncate(disk_info["virtual_size"])
-        for i, disk_change in enumerate(disk_changes):
-            print("Requesting disk data %d/%d. Offset: %d, length: %d" %
-                  (i + 1, len(disk_changes), disk_change["offset"],
-                   disk_change["length"]))
-            get_disk_content(base_url, auth_key, disk_path, f,
-                             disk_change["offset"], disk_change["length"],
-                             verify=verify_cert)
+    if args.local_disk_path:
+        download_to_local_raw_disk(
+            args.base_url, args.auth_key, args.remote_vhd_path, args.rct_id,
+            args.local_disk_path, verify)
+    else:
+        enable_rct(
+            args.base_url, args.auth_key, args.remote_vhd_path,
+            args.enable_rct, verify)
 
 
 if __name__ == "__main__":

@@ -103,7 +103,7 @@ pub struct VirtDisk {
 }
 
 impl VirtDisk {
-    pub fn open(vhd_path: &str) -> Result<VirtDisk, VirtualDiskError> {
+    pub fn open(vhd_path: &str, read_only: bool) -> Result<VirtDisk, VirtualDiskError> {
         let vhd_path_u16 = string_to_u16_vec(vhd_path);
 
         let mut vst: VIRTUAL_STORAGE_TYPE = unsafe { std::mem::zeroed() };
@@ -112,7 +112,7 @@ impl VirtDisk {
 
         let mut op: _OPEN_VIRTUAL_DISK_PARAMETERS = unsafe { std::mem::zeroed() };
         op.Version = _OPEN_VIRTUAL_DISK_VERSION_OPEN_VIRTUAL_DISK_VERSION_3;
-        unsafe { op.__bindgen_anon_1.Version3.ReadOnly = TRUE };
+        unsafe { op.__bindgen_anon_1.Version3.ReadOnly = if read_only { TRUE } else { FALSE } };
 
         let mut vhd_handle: HANDLE = unsafe { std::mem::zeroed() };
 
@@ -182,6 +182,14 @@ impl VirtDisk {
             newer_changes: newer_changes,
             most_recent_id: most_recent_id,
         })
+    }
+
+    pub fn set_rct_info(&mut self, enabled: bool) -> Result<(), VirtualDiskError> {
+        let mut svdi: _SET_VIRTUAL_DISK_INFO = unsafe { std::mem::zeroed() };
+        svdi.Version = _SET_VIRTUAL_DISK_INFO_VERSION_SET_VIRTUAL_DISK_INFO_CHANGE_TRACKING_STATE;
+        svdi.__bindgen_anon_1.ChangeTrackingEnabled = if enabled { TRUE } else { FALSE };
+
+        check_result(unsafe { SetVirtualDiskInformation(self.vhd_handle, &mut svdi) })
     }
 
     pub fn get_virtual_size(&self) -> Result<u64, VirtualDiskError> {

@@ -97,8 +97,8 @@ struct VirtDiskInfo {
     pub virtual_size: u64,
 }
 
-fn open_vdisk(path: &str) -> Result<VirtDisk, NotFound<String>> {
-    VirtDisk::open(&path).map_err(|e| match e.result() {
+fn open_vdisk(path: &str, read_only: bool) -> Result<VirtDisk, NotFound<String>> {
+    VirtDisk::open(&path, read_only).map_err(|e| match e.result() {
         2 => NotFound(format!("Bad vdisk path: {}", path)),
         _ => panic!(e),
     })
@@ -106,7 +106,7 @@ fn open_vdisk(path: &str) -> Result<VirtDisk, NotFound<String>> {
 
 #[get("/vdisk/<path>/info", format = "json")]
 fn get_disk_info(path: String, _key: AuthKeyGuard) -> Result<Json<VirtDiskInfo>, NotFound<String>> {
-    let vdisk = open_vdisk(&path)?;
+    let vdisk = open_vdisk(&path, true)?;
     let virtual_size = vdisk.get_virtual_size().unwrap();
     Ok(Json(VirtDiskInfo {
         virtual_size: virtual_size,
@@ -115,9 +115,16 @@ fn get_disk_info(path: String, _key: AuthKeyGuard) -> Result<Json<VirtDiskInfo>,
 
 #[get("/vdisk/<path>/rct", format = "json")]
 fn get_rct_info(path: String, _key: AuthKeyGuard) -> Result<Json<RCTInfo>, NotFound<String>> {
-    let vdisk = open_vdisk(&path)?;
+    let vdisk = open_vdisk(&path, true)?;
     let rct_info = vdisk.get_rct_info().unwrap();
     Ok(Json(rct_info))
+}
+
+#[put("/vdisk/<path>/rct?<enabled>")]
+fn set_rct_info(path: String, enabled: bool, _key: AuthKeyGuard) -> Result<(), NotFound<String>> {
+    let mut vdisk = open_vdisk(&path, false)?;
+    vdisk.set_rct_info(enabled).unwrap();
+    Ok(())
 }
 
 #[get("/vdisk/<path>/rct/<rct_id>/changes", format = "json")]
@@ -126,7 +133,7 @@ fn query_disk_changes(
     rct_id: String,
     _key: AuthKeyGuard,
 ) -> Result<Json<Vec<VirtualDiskChangeRange>>, NotFound<String>> {
-    let vdisk = open_vdisk(&path)?;
+    let vdisk = open_vdisk(&path, true)?;
     let disk_changes = vdisk.query_changes(&rct_id).unwrap();
     Ok(Json(disk_changes))
 }
@@ -138,7 +145,7 @@ fn get_disk_content(
     length: u64,
     _key: AuthKeyGuard,
 ) -> Result<io::Result<Stream<VirtDiskReader>>, NotFound<String>> {
-    let vdisk = open_vdisk(&path)?;
+    let vdisk = open_vdisk(&path, true)?;
     vdisk.attach().unwrap();
     let reader = VirtDiskReader::new(Box::new(vdisk), offset, length);
     Ok(Ok(Stream::from(reader)))
@@ -158,6 +165,7 @@ fn main() {
             routes![
                 get_disk_info,
                 get_rct_info,
+                set_rct_info,
                 query_disk_changes,
                 get_disk_content
             ],
