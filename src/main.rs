@@ -100,7 +100,7 @@ struct VirtDiskInfo {
 
 fn open_vdisk(path: &str, read_only: bool) -> Result<VirtDisk, NotFound<String>> {
     VirtDisk::open(&path, read_only).map_err(|e| match e.result() {
-        2 => NotFound(format!("Bad vdisk path: {}", path)),
+        ERROR_FILE_NOT_FOUND => NotFound(format!("Bad vdisk path: {}", path)),
         _ => panic!(e),
     })
 }
@@ -144,7 +144,12 @@ fn query_disk_changes(
     _key: AuthKeyGuard,
 ) -> Result<Json<Vec<VirtualDiskChangeRange>>, NotFound<String>> {
     let vdisk = open_vdisk(&path, true)?;
-    let disk_changes = vdisk.query_changes(&rct_id).unwrap();
+    let disk_changes = vdisk.query_changes(&rct_id).map_err(|e| match e.result() {
+        ERROR_VHD_MISSING_CHANGE_TRACKING_INFORMATION => {
+            NotFound(format!("RCT ID not found: {}", rct_id))
+        }
+        _ => panic!(e),
+    })?;
     Ok(Json(disk_changes))
 }
 

@@ -3,9 +3,6 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-pub const ERROR_SUCCESS: DWORD = 0;
-pub const ERROR_INSUFFICIENT_BUFFER: DWORD = 122;
-
 pub type wchar_t = ::std::os::raw::c_ushort;
 pub type ULONG = ::std::os::raw::c_ulong;
 pub type PULONG = *mut ULONG;
