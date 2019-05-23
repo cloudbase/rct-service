@@ -9,10 +9,10 @@ the former](https://github.com/MicrosoftDocs/Virtualization-Documentation/tree/l
 , not much is available for understanding how the native RCT API can be used
 except for the [reference documentation](https://docs.microsoft.com/en-us/windows/desktop/api/virtdisk/nf-virtdisk-querychangesvirtualdisk).
 
-The native RCT function and structures are part of the Virtual Storage API
-(virtdisk.h), in particular the new function
+The native RCT functions and structures are part of the Virtual Storage API
+(virtdisk.h), in particular
 [QueryChangesVirtualDisk](https://docs.microsoft.com/en-us/windows/desktop/api/virtdisk/nf-virtdisk-querychangesvirtualdisk)
-and extensions to the pre-existing
+plus extensions to the pre-existing
 [OpenVirtualDisk](https://docs.microsoft.com/en-us/windows/desktop/api/virtdisk/nf-virtdisk-openvirtualdisk),
 [GetVirtualDiskInformation](https://docs.microsoft.com/en-us/windows/desktop/api/virtdisk/nf-virtdisk-getvirtualdiskinformation) and
 [SetVirtualDiskInformation](https://docs.microsoft.com/en-us/windows/desktop/api/virtdisk/nf-virtdisk-setvirtualdiskinformation).
@@ -25,7 +25,7 @@ areas from its [phisycal mount point path](https://docs.microsoft.com/en-us/wind
 
 This project includes a REST API service to obtain the RCT info from a given
 virtual disk and stream the data remotely over an authenticated HTTPS channel.
-A fully functioning command line Python client is also included.
+A complete command line Python client is also included.
 
 ## Build
 
