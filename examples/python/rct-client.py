@@ -65,11 +65,16 @@ def get_disk_content(base_url, auth_key, disk_path, out_file, offset, length,
                 out_file.write(chunk)
 
 
+def show_rct_info(base_url, auth_key, disk_path, verify):
+    rct_info = get_rct_info(base_url, auth_key, disk_path, verify=verify)
+    print("RCT status: %s" % rct_info)
+
+
 def enable_rct(base_url, auth_key, disk_path, enable_rct, verify):
     set_rct_info(
         base_url, auth_key, disk_path, enabled=enable_rct, verify=verify)
     rct_info = get_rct_info(base_url, auth_key, disk_path, verify=verify)
-    print("RCT status: %s" % rct_info)
+    print("New RCT status: %s" % rct_info)
 
 
 def download_to_local_raw_disk(base_url, auth_key, disk_path, rct_id,
@@ -123,6 +128,9 @@ def parse_arguments():
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
+        '--show-rct-info', action='store_true',
+        help='Show the current RCT info for this virtual disk')
+    group.add_argument(
         '--enable-rct', action='store_true', dest="enable_rct",
         help='Enable RCT for this virtual disk')
     group.add_argument(
@@ -148,6 +156,9 @@ def main():
         download_to_local_raw_disk(
             args.base_url, args.auth_key, args.remote_vhd_path, args.rct_id,
             args.local_disk_path, verify)
+    elif args.show_rct_info:
+        show_rct_info(
+            args.base_url, args.auth_key, args.remote_vhd_path, verify)
     else:
         enable_rct(
             args.base_url, args.auth_key, args.remote_vhd_path,

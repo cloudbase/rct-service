@@ -54,6 +54,14 @@ For development purposes you can also just run it with:
 
 A Python client sample is included to showcase how to use the REST API.
 
+To display the current RCT status for a virtual disk:
+
+    python rct-client.py --auth-key swordfish \
+    --remote-vhd-path "C:\VHDS\mydisk.vhdx" \
+    --local-disk-path mydisk.raw \
+    --show-rct-info \
+    --cert-path C:\path\to\cert.pem
+
 To enable RCT for a virtual disk:
 
     python rct-client.py --auth-key swordfish \
