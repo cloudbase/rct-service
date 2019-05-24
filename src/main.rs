@@ -23,8 +23,10 @@ extern crate rocket_contrib;
 extern crate rctlib;
 
 use rocket::fairing::AdHoc;
+use rocket::http::RawStr;
 use rocket::http::Status;
 use rocket::outcome::Outcome::{Failure, Success};
+use rocket::request::FromFormValue;
 use rocket::request::{self, FromRequest, Request};
 use rocket::response::status::NotFound;
 use rocket::response::Stream;
@@ -61,22 +63,28 @@ impl<'a, 'r> FromRequest<'a, 'r> for AuthKeyGuard {
 struct VirtDiskReader {
     // Needed to make sure the virtual disk doesn't get detached until we are done
     _virt_disk: Box<VirtDisk>,
-    length: u64,
+    ranges: Vec<VirtualDiskChangeRange>,
     reader: BufReader<File>,
+    current_range_index: usize,
     bytes_read: u64,
 }
 
 impl<'a> VirtDiskReader {
-    pub fn new(virt_disk: Box<VirtDisk>, offset: u64, length: u64) -> VirtDiskReader {
+    pub fn new(virt_disk: Box<VirtDisk>, ranges: Vec<VirtualDiskChangeRange>) -> VirtDiskReader {
         let path = virt_disk.get_physical_disk_path().unwrap();
         let f = File::open(path).unwrap();
         let mut reader = BufReader::with_capacity(64 * 1024, f);
-        reader.seek(SeekFrom::Start(offset)).unwrap();
+
+        if ranges.len() > 0 {
+            let offset = ranges[0].offset;
+            reader.seek(SeekFrom::Start(offset)).unwrap();
+        }
 
         VirtDiskReader {
             _virt_disk: virt_disk,
             reader: reader,
-            length: length,
+            ranges: ranges,
+            current_range_index: 0,
             bytes_read: 0,
         }
     }
@@ -84,7 +92,24 @@ impl<'a> VirtDiskReader {
 
 impl Read for VirtDiskReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let length = std::cmp::min(buf.len() as u64, self.length - self.bytes_read);
+        if self.ranges.len() == 0 {
+            return Ok(0);
+        }
+
+        let length = loop {
+            let range_length = self.ranges[self.current_range_index].length;
+            let length = std::cmp::min(buf.len() as u64, range_length - self.bytes_read);
+
+            if length == 0 && self.current_range_index + 1 < self.ranges.len() {
+                self.current_range_index += 1;
+                self.bytes_read = 0;
+                let offset = self.ranges[self.current_range_index].offset;
+                self.reader.seek(SeekFrom::Start(offset)).unwrap();
+            } else {
+                break length;
+            }
+        };
+
         let read = self.reader.read(&mut buf[0..length as usize])?;
         self.bytes_read += read as u64;
         Ok(read)
@@ -95,6 +120,32 @@ impl Read for VirtDiskReader {
 struct VirtDiskInfo {
     pub virtual_size: u64,
     pub parent_path: Option<String>,
+}
+
+struct QueryStringRanges {
+    ranges: Vec<VirtualDiskChangeRange>,
+}
+
+impl<'v> FromFormValue<'v> for QueryStringRanges {
+    type Error = &'v RawStr;
+
+    fn from_form_value(form_value: &'v RawStr) -> Result<QueryStringRanges, &'v RawStr> {
+        let mut ranges: Vec<VirtualDiskChangeRange> = Vec::new();
+        for s in form_value.split(",") {
+            let v = s
+                .split(":")
+                .map(|x| x.parse::<u64>().unwrap())
+                .collect::<Vec<_>>();
+            if v.len() > 2 {
+                return Err("Too many values separated by :".into());
+            }
+            ranges.push(VirtualDiskChangeRange {
+                offset: v[0],
+                length: v[1],
+            });
+        }
+        Ok(QueryStringRanges { ranges: ranges })
+    }
 }
 
 fn open_vdisk(path: &str, read_only: bool) -> Result<VirtDisk, NotFound<String>> {
@@ -152,16 +203,36 @@ fn query_disk_changes(
     Ok(Json(disk_changes))
 }
 
-#[get("/vdisk/<path>/content?<offset>&<length>")]
+#[get("/vdisk/<path>/content?<ranges>")]
 fn get_disk_content(
     path: String,
-    offset: u64,
-    length: u64,
+    ranges: QueryStringRanges,
     _key: AuthKeyGuard,
+) -> Result<io::Result<Stream<VirtDiskReader>>, NotFound<String>> {
+    get_disk_content_common(path, ranges.ranges)
+}
+
+// Provide a POST alternative to GET due to the query string's length limits
+#[post(
+    "/vdisk/<path>/content",
+    format = "application/json",
+    data = "<ranges>"
+)]
+fn get_disk_content_post(
+    path: String,
+    ranges: Json<Vec<VirtualDiskChangeRange>>,
+    _key: AuthKeyGuard,
+) -> Result<io::Result<Stream<VirtDiskReader>>, NotFound<String>> {
+    get_disk_content_common(path, ranges.to_vec())
+}
+
+fn get_disk_content_common(
+    path: String,
+    ranges: Vec<VirtualDiskChangeRange>,
 ) -> Result<io::Result<Stream<VirtDiskReader>>, NotFound<String>> {
     let vdisk = open_vdisk(&path, true)?;
     vdisk.attach().unwrap();
-    let reader = VirtDiskReader::new(Box::new(vdisk), offset, length);
+    let reader = VirtDiskReader::new(Box::new(vdisk), ranges);
     Ok(Ok(Stream::from(reader)))
 }
 
@@ -181,7 +252,8 @@ fn main() {
                 get_rct_info,
                 set_rct_info,
                 query_disk_changes,
-                get_disk_content
+                get_disk_content,
+                get_disk_content_post
             ],
         )
         .launch();

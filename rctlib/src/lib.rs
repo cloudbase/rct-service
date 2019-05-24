@@ -92,13 +92,13 @@ fn check_result(res: DWORD) -> Result<(), VirtualDiskError> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VirtualDiskChangeRange {
     pub offset: u64,
     pub length: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RCTInfo {
     pub enabled: bool,
     pub newer_changes: bool,
