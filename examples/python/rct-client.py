@@ -68,6 +68,7 @@ def get_disk_content(base_url, auth_key, disk_path, out_file, ranges, verify):
         current_range = ranges[current_range_index]
         length = current_range["length"]
         out_file.seek(current_range["offset"])
+        total_bytes_written = 0
 
         for chunk in r.iter_content(chunk_size=8192):
             while True:
@@ -79,6 +80,7 @@ def get_disk_content(base_url, auth_key, disk_path, out_file, ranges, verify):
                     buf = chunk[0:length - range_bytes_written]
                     out_file.write(buf)
                     range_bytes_written += len(buf)
+                    total_bytes_written += len(buf)
 
                     if (length == range_bytes_written and
                             current_range_index + 1 < len(ranges)):
@@ -89,6 +91,12 @@ def get_disk_content(base_url, auth_key, disk_path, out_file, ranges, verify):
                         out_file.seek(current_range["offset"])
 
                     chunk = chunk[len(buf):]
+
+        expected_bytes = sum([r["length"] for r in ranges])
+        if total_bytes_written != expected_bytes:
+            raise Exception(
+                "Incomplete response. Bytes expected: "
+                "%d, received: %d" % (expected_bytes, total_bytes_written))
 
 
 def show_rct_info(base_url, auth_key, disk_path, verify):
@@ -112,22 +120,27 @@ def download_to_local_raw_disk(base_url, auth_key, disk_path, rct_id,
     disk_info = get_disk_info(
         base_url, auth_key, disk_path, verify=verify)
     print("Virtual disk info: %s" % disk_info)
+    virtual_disk_size = disk_info["virtual_size"]
 
-    rct_info = get_rct_info(base_url, auth_key, disk_path, verify=verify)
-    print("RCT status: %s" % rct_info)
+    if rct_id:
+        rct_info = get_rct_info(base_url, auth_key, disk_path, verify=verify)
+        print("RCT status: %s" % rct_info)
 
-    if not rct_info["enabled"]:
-        raise Exception("RCT not enabled for this disk")
+        if not rct_info["enabled"]:
+            raise Exception("RCT not enabled for this disk")
 
-    rct_id = rct_id or rct_info["most_recent_id"]
-
-    disk_changes = query_disk_changes(
-        base_url, auth_key, disk_path, rct_id, verify=verify)
-    print("Disk changes: %d" % len(disk_changes))
-    print("Total bytes: %d" % sum(d["length"] for d in disk_changes))
+        disk_changes = query_disk_changes(
+            base_url, auth_key, disk_path, rct_id, verify=verify)
+        print("Disk changes: %d" % len(disk_changes))
+        print("Total bytes: %d" % sum(d["length"] for d in disk_changes))
+    else:
+        # Get the entire disk
+        print("Retrieving entire disk content. Total bytes: %d" %
+              virtual_disk_size)
+        disk_changes = [{"offset": 0, "length": virtual_disk_size}]
 
     with open(local_filename, 'wb') as f:
-        f.truncate(disk_info["virtual_size"])
+        f.truncate(virtual_disk_size)
         tot_size = 0
         ranges = []
         for i, disk_change in enumerate(disk_changes):
@@ -135,16 +148,34 @@ def download_to_local_raw_disk(base_url, auth_key, disk_path, rct_id,
                   (i + 1, len(disk_changes), disk_change["offset"],
                    disk_change["length"]))
 
-            # TODO(alexpilotti): split a range past the limit
-            tot_size += disk_change["length"]
-            ranges.append(disk_change)
+            offset = disk_change["offset"]
+            length = disk_change["length"]
+            get_data = (max_bytes_per_request == 0 or
+                        tot_size + length >= max_bytes_per_request)
 
-            if (max_bytes_per_request == 0 or
-                    tot_size >= max_bytes_per_request):
-                get_disk_content(base_url, auth_key, disk_path, f, ranges,
-                                 verify=verify)
-                tot_size = 0
-                ranges = []
+            while True:
+                if not max_bytes_per_request:
+                    range_length = length
+                else:
+                    range_length = min(
+                        length, max_bytes_per_request - tot_size)
+
+                tot_size += range_length
+                ranges.append({"offset": offset, "length": range_length})
+
+                if get_data:
+                    get_disk_content(base_url, auth_key, disk_path, f, ranges,
+                                     verify=verify)
+                    ranges = []
+                    tot_size = 0
+
+                length -= range_length
+                if not length:
+                    break
+                offset += range_length
+                get_data = True
+                print("Range split due to transfer size limit. "
+                      "Remaining length: %d" % length)
 
         if ranges:
             get_disk_content(base_url, auth_key, disk_path, f, ranges,
@@ -174,7 +205,7 @@ def parse_arguments():
         help="X509 server certificate to be verified")
     parser.add_argument(
         '--rct-id', type=str,
-        help="RCT id, using the last available one if not provided")
+        help="RCT id, retrieves the entire disk's content if not provided")
     parser.add_argument(
         '--max-bytes-per-request', type=_get_long_type(),
         default=DEFAULT_MAX_BYTES_PER_REQUEST,

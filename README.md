@@ -87,7 +87,7 @@ To download the changed sectors since a given RCT ID into a local RAW disk
     --rct-id "rctX:5bfde23b:ce75:4303:b54f:6c18394f105c:00000001" \
     --cert-path C:\path\to\cert.pem
 
-The RCT ID is optional, if not provided the last available one is used.
+The RCT ID is optional, if not provided the entire disk content is retrieved.
 The local disk path contains the data obtained from the RCT service, in RAW
 format (it can be converted to other formats with
 [qemu-img](https://cloudbase.it/qemu-img-windows/) if needed).
