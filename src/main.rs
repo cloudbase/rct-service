@@ -35,7 +35,7 @@ use rocket_contrib::json::Json;
 
 use std::fs::File;
 use std::io::prelude::*;
-use std::io::{self, BufReader, Read, SeekFrom};
+use std::io::{self, Read, SeekFrom};
 
 use rctlib::*;
 
@@ -64,7 +64,7 @@ struct VirtDiskReader {
     // Needed to make sure the virtual disk doesn't get detached until we are done
     _virt_disk: Box<VirtDisk>,
     ranges: Vec<VirtualDiskChangeRange>,
-    reader: BufReader<File>,
+    reader: File,
     current_range_index: usize,
     bytes_read: u64,
 }
@@ -72,8 +72,9 @@ struct VirtDiskReader {
 impl<'a> VirtDiskReader {
     pub fn new(virt_disk: Box<VirtDisk>, ranges: Vec<VirtualDiskChangeRange>) -> VirtDiskReader {
         let path = virt_disk.get_physical_disk_path().unwrap();
-        let f = File::open(path).unwrap();
-        let mut reader = BufReader::with_capacity(64 * 1024, f);
+        // Using BufReader would fail with the following error when reaching the end of the disk:
+        // Os { code: 27, kind: Other, message: "The drive cannot find the sector requested." }.
+        let mut reader = File::open(path).unwrap();
 
         if ranges.len() > 0 {
             let offset = ranges[0].offset;
