@@ -14,11 +14,13 @@
 #    under the License.
 
 import argparse
+import logging
 import requests
 from requests.packages.urllib3 import exceptions
 import sys
 
 DEFAULT_MAX_BYTES_PER_REQUEST = 20 * 1024 * 1024
+LOG = logging
 
 
 def get_disk_info(base_url, auth_key, disk_path, verify):
@@ -102,16 +104,16 @@ def get_disk_content(base_url, auth_key, disk_path, out_file, ranges, verify):
 def show_rct_info(base_url, auth_key, disk_path, verify):
     disk_info = get_disk_info(
         base_url, auth_key, disk_path, verify=verify)
-    print("Virtual disk info: %s" % disk_info)
+    LOG.info("Virtual disk info: %s" % disk_info)
     rct_info = get_rct_info(base_url, auth_key, disk_path, verify=verify)
-    print("RCT status: %s" % rct_info)
+    LOG.info("RCT status: %s" % rct_info)
 
 
 def enable_rct(base_url, auth_key, disk_path, enable_rct, verify):
     set_rct_info(
         base_url, auth_key, disk_path, enabled=enable_rct, verify=verify)
     rct_info = get_rct_info(base_url, auth_key, disk_path, verify=verify)
-    print("New RCT status: %s" % rct_info)
+    LOG.info("New RCT status: %s" % rct_info)
 
 
 def download_to_local_raw_disk(base_url, auth_key, disk_path, rct_id,
@@ -119,24 +121,24 @@ def download_to_local_raw_disk(base_url, auth_key, disk_path, rct_id,
                                verify):
     disk_info = get_disk_info(
         base_url, auth_key, disk_path, verify=verify)
-    print("Virtual disk info: %s" % disk_info)
+    LOG.info("Virtual disk info: %s" % disk_info)
     virtual_disk_size = disk_info["virtual_size"]
 
     if rct_id:
         rct_info = get_rct_info(base_url, auth_key, disk_path, verify=verify)
-        print("RCT status: %s" % rct_info)
+        LOG.info("RCT status: %s" % rct_info)
 
         if not rct_info["enabled"]:
             raise Exception("RCT not enabled for this disk")
 
         disk_changes = query_disk_changes(
             base_url, auth_key, disk_path, rct_id, verify=verify)
-        print("Disk changes: %d" % len(disk_changes))
-        print("Total bytes: %d" % sum(d["length"] for d in disk_changes))
+        LOG.info("Disk changes: %d" % len(disk_changes))
+        LOG.info("Total bytes: %d" % sum(d["length"] for d in disk_changes))
     else:
         # Get the entire disk
-        print("Retrieving entire disk content. Total bytes: %d" %
-              virtual_disk_size)
+        LOG.info("Retrieving entire disk content. Total bytes: %d" %
+                 virtual_disk_size)
         disk_changes = [{"offset": 0, "length": virtual_disk_size}]
 
     with open(local_filename, 'wb') as f:
@@ -144,9 +146,9 @@ def download_to_local_raw_disk(base_url, auth_key, disk_path, rct_id,
         tot_size = 0
         ranges = []
         for i, disk_change in enumerate(disk_changes):
-            print("Requesting disk data %d/%d. Offset: %d, length: %d" %
-                  (i + 1, len(disk_changes), disk_change["offset"],
-                   disk_change["length"]))
+            LOG.info("Requesting disk data %d/%d. Offset: %d, length: %d" %
+                     (i + 1, len(disk_changes), disk_change["offset"],
+                      disk_change["length"]))
 
             offset = disk_change["offset"]
             length = disk_change["length"]
@@ -174,8 +176,8 @@ def download_to_local_raw_disk(base_url, auth_key, disk_path, rct_id,
                     break
                 offset += range_length
                 get_data = True
-                print("Range split due to transfer size limit. "
-                      "Remaining length: %d" % length)
+                LOG.info("Range split due to transfer size limit. "
+                         "Remaining length: %d" % length)
 
         if ranges:
             get_disk_content(base_url, auth_key, disk_path, f, ranges,
@@ -236,6 +238,8 @@ def main():
         exceptions.InsecureRequestWarning)
     requests.packages.urllib3.disable_warnings(
         exceptions.SubjectAltNameWarning)
+
+    LOG.basicConfig(format="%(message)s", level=logging.INFO)
 
     args = parse_arguments()
     verify = args.cert_path or False
