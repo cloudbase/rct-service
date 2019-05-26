@@ -94,7 +94,7 @@ def get_disk_content(base_url, auth_key, disk_path, out_file, ranges, verify):
 
                     chunk = chunk[len(buf):]
 
-        expected_bytes = sum([r["length"] for r in ranges])
+        expected_bytes = sum([v["length"] for v in ranges])
         if total_bytes_written != expected_bytes:
             raise Exception(
                 "Incomplete response. Bytes expected: "
