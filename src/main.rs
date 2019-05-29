@@ -151,7 +151,9 @@ impl<'v> FromFormValue<'v> for QueryStringRanges {
 
 fn open_vdisk(path: &str, read_only: bool) -> Result<VirtDisk, NotFound<String>> {
     VirtDisk::open(&path, read_only).map_err(|e| match e.result() {
-        ERROR_FILE_NOT_FOUND => NotFound(format!("Bad vdisk path: {}", path)),
+        ERROR_FILE_NOT_FOUND | ERROR_PATH_NOT_FOUND => {
+            NotFound(format!("Bad vdisk path: {}", path))
+        }
         _ => panic!(e),
     })
 }
