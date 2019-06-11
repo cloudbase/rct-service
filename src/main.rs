@@ -29,7 +29,7 @@ use rocket::outcome::Outcome::{Failure, Success};
 use rocket::request::FromFormValue;
 use rocket::request::{self, FromRequest, Request};
 use rocket::response::status::NotFound;
-use rocket::response::Stream;
+use rocket::response::{self, Responder, Response};
 use rocket::State;
 use rocket_contrib::json::Json;
 
@@ -38,6 +38,8 @@ use std::io::prelude::*;
 use std::io::{self, Read, SeekFrom};
 
 use rctlib::*;
+
+const CHUNK_SIZE: u64 = 16 * 1024;
 
 #[derive(Debug)]
 struct AuthKey {
@@ -89,6 +91,10 @@ impl<'a> VirtDiskReader {
             bytes_read: 0,
         }
     }
+
+    pub fn get_content_length(&self) -> u64 {
+        self.ranges.iter().map(|x| x.length).sum()
+    }
 }
 
 impl Read for VirtDiskReader {
@@ -114,6 +120,22 @@ impl Read for VirtDiskReader {
         let read = self.reader.read(&mut buf[0..length as usize])?;
         self.bytes_read += read as u64;
         Ok(read)
+    }
+}
+
+struct DiskContentResponder {
+    reader: Box<VirtDiskReader>,
+}
+
+impl<'r> Responder<'r> for DiskContentResponder {
+    fn respond_to(self, _: &Request) -> response::Result<'r> {
+        let content_length = self.reader.get_content_length();
+        // Using CHUNK_SIZE to optimize disk reads
+        Response::build()
+            .chunked_body(self.reader, CHUNK_SIZE)
+            .raw_header("Content-Length", content_length.to_string())
+            .raw_header("Content-Type", "application/octet-stream")
+            .ok()
     }
 }
 
@@ -211,7 +233,7 @@ fn get_disk_content(
     path: String,
     ranges: QueryStringRanges,
     _key: AuthKeyGuard,
-) -> Result<io::Result<Stream<VirtDiskReader>>, NotFound<String>> {
+) -> Result<DiskContentResponder, NotFound<String>> {
     get_disk_content_common(path, ranges.ranges)
 }
 
@@ -225,18 +247,20 @@ fn get_disk_content_post(
     path: String,
     ranges: Json<Vec<VirtualDiskChangeRange>>,
     _key: AuthKeyGuard,
-) -> Result<io::Result<Stream<VirtDiskReader>>, NotFound<String>> {
+) -> Result<DiskContentResponder, NotFound<String>> {
     get_disk_content_common(path, ranges.to_vec())
 }
 
 fn get_disk_content_common(
     path: String,
     ranges: Vec<VirtualDiskChangeRange>,
-) -> Result<io::Result<Stream<VirtDiskReader>>, NotFound<String>> {
+) -> Result<DiskContentResponder, NotFound<String>> {
     let vdisk = open_vdisk(&path, true)?;
     vdisk.attach().unwrap();
     let reader = VirtDiskReader::new(Box::new(vdisk), ranges);
-    Ok(Ok(Stream::from(reader)))
+    Ok(DiskContentResponder {
+        reader: Box::new(reader),
+    })
 }
 
 fn main() {
