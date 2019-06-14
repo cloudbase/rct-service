@@ -223,6 +223,24 @@ impl VirtDisk {
         })
     }
 
+    pub fn get_virtual_storage_type(&self) -> Result<u32, VirtualDiskError> {
+        let buf = self
+            .get_info(_GET_VIRTUAL_DISK_INFO_VERSION_GET_VIRTUAL_DISK_INFO_VIRTUAL_STORAGE_TYPE)?;
+        let gvdi: &_GET_VIRTUAL_DISK_INFO =
+            unsafe { &*(buf.as_ptr() as *const _ as *const _GET_VIRTUAL_DISK_INFO) };
+        let virtual_storage_type = unsafe { gvdi.__bindgen_anon_1.VirtualStorageType.DeviceId };
+        Ok(virtual_storage_type)
+    }
+
+    pub fn get_provider_sub_type(&self) -> Result<u32, VirtualDiskError> {
+        let buf =
+            self.get_info(_GET_VIRTUAL_DISK_INFO_VERSION_GET_VIRTUAL_DISK_INFO_PROVIDER_SUBTYPE)?;
+        let gvdi: &_GET_VIRTUAL_DISK_INFO =
+            unsafe { &*(buf.as_ptr() as *const _ as *const _GET_VIRTUAL_DISK_INFO) };
+        let provider_sub_type = unsafe { gvdi.__bindgen_anon_1.ProviderSubtype };
+        Ok(provider_sub_type)
+    }
+
     pub fn query_changes(
         &self,
         change_tracking_id: &str,

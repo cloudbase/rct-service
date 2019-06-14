@@ -143,6 +143,8 @@ impl<'r> Responder<'r> for DiskContentResponder {
 struct VirtDiskInfo {
     pub virtual_size: u64,
     pub parent_path: Option<String>,
+    pub virtual_storage_type: u32,
+    pub provider_sub_type: u32,
 }
 
 struct QueryStringRanges {
@@ -191,10 +193,14 @@ fn get_disk_info(path: String, _key: AuthKeyGuard) -> Result<Json<VirtDiskInfo>,
         },
         |v| Some(v),
     );
+    let virtual_storage_type = vdisk.get_virtual_storage_type().unwrap();
+    let provider_sub_type = vdisk.get_provider_sub_type().unwrap();
 
     Ok(Json(VirtDiskInfo {
         virtual_size: virtual_size,
         parent_path: parent_path,
+        virtual_storage_type: virtual_storage_type,
+        provider_sub_type: provider_sub_type,
     }))
 }
 
